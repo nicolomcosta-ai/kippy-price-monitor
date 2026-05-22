@@ -71,7 +71,21 @@ def scrape(source):
     try:
         r = requests.get(source["url"], headers=HEADERS, timeout=15)
         soup = BeautifulSoup(r.text, "lxml")
+def scrape(source):
+    time.sleep(2)
+    try:
+        r = requests.get(source["url"], headers=HEADERS, timeout=15)
+        soup = BeautifulSoup(r.text, "lxml")
 
+        if source["type"] == "kippy":
+            # DEBUG TEMPORANEO
+            el_debug = soup.select_one("span.prezzo-cnt-cls")
+            print(f"    prezzo-cnt-cls trovato: {el_debug.get_text(strip=True) if el_debug else 'NO'}")
+            print(f"    Status: {r.status_code} | URL finale: {r.url}")
+            # fine debug
+
+            el = soup.select_one("span.prezzo-cnt-cls")
+            if el:
         if source["type"] == "kippy":
             # Selettore esatto del prezzo prodotto (non abbonamento)
             el = soup.select_one("span.prezzo-cnt-cls")
