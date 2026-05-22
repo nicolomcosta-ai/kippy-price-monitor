@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 GMAIL_USER = os.environ["GMAIL_USER"]
 GMAIL_PASS = os.environ["GMAIL_PASS"]
 MAIL_TO    = [m.strip() for m in os.environ["MAIL_TO"].split(",")]
+
 REF_PRICE  = 69.99
 
 HEADERS = {
@@ -54,24 +55,22 @@ SOURCES = [
 
 # ── Scraping ─────────────────────────────────────────────────────
 def scrape(source):
-    time.sleep(2)  # pausa per evitare ban
+    time.sleep(2)
     try:
         r = requests.get(source["url"], headers=HEADERS, timeout=15)
         soup = BeautifulSoup(r.text, "lxml")
 
         if source["type"] == "kippy":
-            # Cerca il prezzo nella pagina Kippy.eu
-            for tag in soup.find_all(string=re.compile(r'[€£]s*d+[.,]d+')):
-                m = re.search(r'[€£]s*(d+[.,]d+)', tag)
+            for tag in soup.find_all(string=re.compile(r'[€£]\s*\d+[.,]\d+')):
+                m = re.search(r'[€£]\s*(\d+[.,]\d+)', tag)
                 if m:
-                    price = float(m.group(1).replace(',','.'))
+                    price = float(m.group(1).replace(',', '.'))
                     avail = "Disponibile" if soup.find(string=re.compile(
                         r'Disponibil|In Stock|En stock|Auf Lager|En stock', re.I)) else "N/D"
                     return {"price": price, "currency": "EUR",
                             "available": avail, "raw": m.group(0)}
 
         elif source["type"] == "amazon":
-            # Selettori prezzo Amazon
             selectors = [
                 "span.a-price-whole",
                 "#priceblock_ourprice",
@@ -83,11 +82,12 @@ def scrape(source):
                 el = soup.select_one(sel)
                 if el:
                     raw = el.get_text(strip=True)
-                    nums = re.findall(r'[d]+[.,][d]+', raw.replace(' ',''))
+                    nums = re.findall(r'\d+[.,]\d+', raw.replace(' ', ''))
                     if nums:
-                        price = float(nums[0].replace(',','.'))
-                        # Determina valuta dal dominio
-                        cur = "GBP" if "amazon.co.uk" in source["url"] else                               "SEK" if "amazon.se"    in source["url"] else                               "PLN" if "amazon.pl"    in source["url"] else "EUR"
+                        price = float(nums[0].replace(',', '.'))
+                        cur = ("GBP" if "amazon.co.uk" in source["url"] else
+                               "SEK" if "amazon.se"    in source["url"] else
+                               "PLN" if "amazon.pl"    in source["url"] else "EUR")
                         avail = "Disponibile" if soup.find(
                             string=re.compile(r'In Stock|Disponibil|Auf Lager|En stock|I lager', re.I)) else "Non disponibile"
                         return {"price": price, "currency": cur,
@@ -95,95 +95,101 @@ def scrape(source):
 
     except Exception as e:
         print(f"  ERRORE {source['label']}: {e}")
+
     return {"price": None, "currency": "EUR", "available": "Errore", "raw": "N/D"}
 
 # ── Genera HTML email ─────────────────────────────────────────────
 def build_email(results):
     today = datetime.now().strftime("%d/%m/%Y %H:%M")
-    fx = {"EUR":1.0, "GBP":1.17, "SEK":0.089, "PLN":0.23}
+    fx = {"EUR": 1.0, "GBP": 1.17, "SEK": 0.089, "PLN": 0.23}
 
     anomalies = []
     for r in results:
         if r["price"]:
-            eur_eq = r["price"] * fx.get(r["currency"],1)
+            eur_eq = r["price"] * fx.get(r["currency"], 1)
             if eur_eq < REF_PRICE - 5:
                 anomalies.append(r)
 
     alert_html = ""
     if anomalies:
-        items = "".join(f"
-{a['label']}: {a['raw']} (≈€{a['price']*fx.get(a['currency'],1):.2f}) vs €{REF_PRICE}
-" for a in anomalies)
+        items = "".join(
+            f"<li>{a['label']}: {a['raw']} (≈€{a['price'] * fx.get(a['currency'], 1):.2f}) vs €{REF_PRICE}</li>"
+            for a in anomalies
+        )
         alert_html = f"""
-
-        ⚠️ {len(anomalies)} anomalie di prezzo rilevate!
-{items}
-"""
+        <div style="background:#fff5f5;border:2px solid #fc8181;border-radius:8px;padding:16px;margin-bottom:24px;">
+          <strong>⚠️ {len(anomalies)} anomalie di prezzo rilevate!</strong>
+          <ul style="margin:8px 0 0 0;">{items}</ul>
+        </div>"""
 
     rows = ""
     for r in results:
         if r["price"]:
-            eur_eq = r["price"] * fx.get(r["currency"],1)
-            diff   = eur_eq - REF_PRICE
-            diff_s = f"+€{diff:.2f}" if diff >= 0 else f"€{diff:.2f}"
-            bg     = "#fff5f5" if diff < -5 else "#f0fff4" if abs(diff)<0.5 else "#fffbeb"
-            dc     = "#c53030" if diff < -5 else "#276749" if abs(diff)<0.5 else "#975a16"
-            price_s= f"{r['raw']}" if r["raw"]!="N/D" else "N/D"
+            eur_eq  = r["price"] * fx.get(r["currency"], 1)
+            diff    = eur_eq - REF_PRICE
+            diff_s  = f"+€{diff:.2f}" if diff >= 0 else f"€{diff:.2f}"
+            bg      = "#fff5f5" if diff < -5 else "#f0fff4" if abs(diff) < 0.5 else "#fffbeb"
+            dc      = "#c53030" if diff < -5 else "#276749" if abs(diff) < 0.5 else "#975a16"
+            price_s = f"{r['raw']}" if r["raw"] != "N/D" else "N/D"
         else:
-            bg,dc,diff_s,price_s = "#f7fafc","#a0aec0","N/D","Non disponibile"
+            bg, dc, diff_s, price_s = "#f7fafc", "#a0aec0", "N/D", "Non disponibile"
 
         avail_s = r["available"]
         avail_c = "#276749" if "Disp" in avail_s or "Stock" in avail_s or "lager" in avail_s.lower() else "#c53030"
-        rows += f"""
-          {r['label']}
 
-            {r['url'][:55]}...
-          {price_s}
-          {diff_s}
-          {avail_s}
-        """
+        rows += (
+            f'<tr style="background:{bg};">'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">{r["label"]}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#718096;font-size:12px;">'
+            f'{r["url"][:55]}...</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;">{price_s}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:{dc};font-weight:600;">{diff_s}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:{avail_c};">{avail_s}</td>'
+            f'</tr>'
+        )
 
-    return f"""
-    
-
-      
-
-        
-🐾 Kippy Price Monitor
-
-        
-
-Report giornaliero prezzi · {today}
-
-
-      
-
-      
-
-        {alert_html}
-        
-
-Prezzo di riferimento kippy.eu: €{REF_PRICE}
-
-
-        {rows}
-SORGENTE	PREZZO	DIFF. VS €69.99	DISPONIBILITÀ
-
-        
-
-
-          Kippy Price Monitor · Report automatico · Non rispondere a questa email
-        
-
-
-      
-
-    
-"""
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#f7fafc; margin:0; padding:24px; }}
+    .container {{ max-width:860px; margin:0 auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.08); }}
+    .header {{ background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; padding:28px 32px; }}
+    .header h1 {{ margin:0 0 4px; font-size:22px; }}
+    .header p {{ margin:0; opacity:.85; font-size:14px; }}
+    .body {{ padding:28px 32px; }}
+    table {{ width:100%; border-collapse:collapse; font-size:14px; }}
+    th {{ background:#edf2f7; padding:10px 12px; text-align:left; font-size:12px; color:#4a5568; text-transform:uppercase; letter-spacing:.05em; }}
+    .footer {{ background:#edf2f7; padding:16px 32px; text-align:center; font-size:12px; color:#718096; }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🐾 Kippy Price Monitor</h1>
+      <p>Report giornaliero prezzi · {today}</p>
+    </div>
+    <div class="body">
+      {alert_html}
+      <p style="margin:0 0 16px;color:#4a5568;">Prezzo di riferimento kippy.eu: <strong>€{REF_PRICE}</strong></p>
+      <table>
+        <thead>
+          <tr>
+            <th>Sorgente</th><th>URL</th><th>Prezzo</th><th>Diff. vs €{REF_PRICE}</th><th>Disponibilità</th>
+          </tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </div>
+    <div class="footer">Kippy Price Monitor · Report automatico · Non rispondere a questa email</div>
+  </div>
+</body>
+</html>"""
 
 # ── Invio email ───────────────────────────────────────────────────
 def send_email(html_body, anomaly_count):
-    today = datetime.now().strftime("%d/%m/%Y")
+    today   = datetime.now().strftime("%d/%m/%Y")
     subject = f"🐾 Kippy Prezzi {today}"
     if anomaly_count > 0:
         subject = f"⚠️ [{anomaly_count} anomalie] " + subject
@@ -202,6 +208,7 @@ def send_email(html_body, anomaly_count):
 # ── Main ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
     print(f"🔍 Avvio scraping – {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+
     results = []
     for s in SOURCES:
         print(f"  Scraping: {s['label']}")
@@ -210,9 +217,9 @@ if __name__ == "__main__":
         results.append(r)
         print(f"    → {r['raw']} | {r['available']}")
 
-    fx = {"EUR":1.0, "GBP":1.17, "SEK":0.089, "PLN":0.23}
+    fx = {"EUR": 1.0, "GBP": 1.17, "SEK": 0.089, "PLN": 0.23}
     anomalies = sum(1 for r in results if r["price"] and
-                    r["price"] * fx.get(r["currency"],1) < REF_PRICE - 5)
+                    r["price"] * fx.get(r["currency"], 1) < REF_PRICE - 5)
 
     print(f"\n📊 Anomalie rilevate: {anomalies}")
     html_body = build_email(results)
