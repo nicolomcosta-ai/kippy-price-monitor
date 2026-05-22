@@ -18,6 +18,10 @@ HEADERS = {
                   "Chrome/124.0.0.0 Safari/537.36",
     "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Encoding": "gzip, deflate, br",
+    "DNT": "1",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
 }
 
 CURRENCY_MAP = {
@@ -69,6 +73,20 @@ def scrape(source):
         soup = BeautifulSoup(r.text, "lxml")
 
         if source["type"] == "kippy":
+            # Selettore esatto del prezzo prodotto (non abbonamento)
+            el = soup.select_one("span.prezzo-cnt-cls")
+            if el:
+                text = el.get_text(strip=True)
+                m = re.search(r'([€£$])\s*(\d+[.,]\d+)', text)
+                if m:
+                    symbol = m.group(1)
+                    price  = float(m.group(2).replace(',', '.'))
+                    cur    = CURRENCY_MAP.get(symbol, "EUR")
+                    avail  = "Disponibile" if soup.find(string=re.compile(
+                        r'Disponibil|In Stock|En stock|Auf Lager', re.I)) else "N/D"
+                    return {"price": price, "currency": cur,
+                            "available": avail, "raw": f"{symbol}{price:.2f}"}
+            # Fallback: ricerca generica se il selettore non funziona
             for tag in soup.find_all(string=re.compile(r'[€£$]\s*\d+[.,]\d+')):
                 m = re.search(r'([€£$])\s*(\d+[.,]\d+)', tag)
                 if m:
@@ -81,19 +99,24 @@ def scrape(source):
                             "available": avail, "raw": f"{symbol}{price:.2f}"}
 
         elif source["type"] == "amazon":
+            # Debug: rileva CAPTCHA o blocco
+            if "captcha" in r.text.lower() or "robot" in r.text.lower() or r.status_code != 200:
+                print(f"    ⚠️ Possibile blocco Amazon (status: {r.status_code})")
+                return {"price": None, "currency": "EUR", "available": "Bloccato", "raw": "N/D"}
+
             selectors = [
                 "span.a-price-whole",
                 "#priceblock_ourprice",
                 "#priceblock_dealprice",
                 ".a-price .a-offscreen",
                 "#corePrice_feature_div .a-offscreen",
+                "#apex_offerDisplay_desktop .a-offscreen",
+                "#newBuyBoxPrice",
             ]
             for sel in selectors:
                 el = soup.select_one(sel)
                 if el:
-                    raw = el.get_text(strip=True)
-                    # FIX: rimuove il punto finale se presente
-                    raw = raw.rstrip('.')
+                    raw = el.get_text(strip=True).rstrip('.')
                     nums = re.findall(r'\d+[.,]\d+', raw.replace(' ', ''))
                     if nums:
                         price = float(nums[0].replace(',', '.'))
@@ -104,6 +127,8 @@ def scrape(source):
                             string=re.compile(r'In Stock|Disponibil|Auf Lager|En stock|I lager', re.I)) else "Non disponibile"
                         return {"price": price, "currency": cur,
                                 "available": avail, "raw": raw}
+
+            print(f"    ⚠️ Nessun selettore prezzo trovato per {source['label']} (status: {r.status_code})")
 
     except Exception as e:
         print(f"  ERRORE {source['label']}: {e}")
@@ -138,7 +163,6 @@ def build_email(results):
 
     rows = ""
     for r in results:
-        # FIX: URL senza troncamento e senza punto finale
         clean_url = r["url"].rstrip('.')
         if r["price"]:
             eur_eq  = r["price"] * fx.get(r["currency"], 1)
@@ -146,7 +170,6 @@ def build_email(results):
             diff_s  = f"+&#8364;{diff:.2f}" if diff >= 0 else f"&#8364;{diff:.2f}"
             bg      = "#fff5f5" if diff < -5 else "#f0fff4" if abs(diff) < 0.5 else "#fffbeb"
             dc      = "#c53030" if diff < -5 else "#276749" if abs(diff) < 0.5 else "#975a16"
-            # Mostra valuta originale se non EUR
             if r["currency"] != "EUR":
                 price_s = f"{r['raw']} ({r['currency']})"
             else:
@@ -168,7 +191,6 @@ def build_email(results):
             f'</tr>'
         )
 
-    # FIX Outlook: tabella per layout, niente CSS avanzato, HTML entities invece di emoji
     return """<!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
@@ -239,7 +261,6 @@ def send_email(html_body, anomaly_count):
     msg["Subject"] = subject
     msg["From"]    = GMAIL_USER
     msg["To"]      = ", ".join(MAIL_TO)
-    # FIX Outlook: aggiunge versione plain text
     plain = f"Kippy Price Monitor - Report {today}\nVedi la versione HTML per i dettagli."
     msg.attach(MIMEText(plain, "plain"))
     msg.attach(MIMEText(html_body, "html"))
