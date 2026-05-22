@@ -71,11 +71,6 @@ def scrape(source):
     try:
         r = requests.get(source["url"], headers=HEADERS, timeout=15)
         soup = BeautifulSoup(r.text, "lxml")
-def scrape(source):
-    time.sleep(2)
-    try:
-        r = requests.get(source["url"], headers=HEADERS, timeout=15)
-        soup = BeautifulSoup(r.text, "lxml")
 
         if source["type"] == "kippy":
             # DEBUG TEMPORANEO
@@ -84,10 +79,6 @@ def scrape(source):
             print(f"    Status: {r.status_code} | URL finale: {r.url}")
             # fine debug
 
-            el = soup.select_one("span.prezzo-cnt-cls")
-            if el:
-        if source["type"] == "kippy":
-            # Selettore esatto del prezzo prodotto (non abbonamento)
             el = soup.select_one("span.prezzo-cnt-cls")
             if el:
                 text = el.get_text(strip=True)
@@ -100,7 +91,7 @@ def scrape(source):
                         r'Disponibil|In Stock|En stock|Auf Lager', re.I)) else "N/D"
                     return {"price": price, "currency": cur,
                             "available": avail, "raw": f"{symbol}{price:.2f}"}
-            # Fallback: ricerca generica se il selettore non funziona
+            # Fallback: ricerca generica
             for tag in soup.find_all(string=re.compile(r'[€£$]\s*\d+[.,]\d+')):
                 m = re.search(r'([€£$])\s*(\d+[.,]\d+)', tag)
                 if m:
