@@ -2,15 +2,16 @@ import os, smtplib, time, re
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
+from urllib.parse import urlparse
+
 import requests
 from bs4 import BeautifulSoup
-import keepa
+from playwright.sync_api import sync_playwright
 
 # ── Configurazione ──────────────────────────────────────────────
-GMAIL_USER  = os.environ["GMAIL_USER"]
-GMAIL_PASS  = os.environ["GMAIL_PASS"]
-MAIL_TO     = [m.strip() for m in os.environ["MAIL_TO"].split(",")]
-KEEPA_KEY   = os.environ["KEEPA_KEY"]
+GMAIL_USER = os.environ["GMAIL_USER"]
+GMAIL_PASS = os.environ["GMAIL_PASS"]
+MAIL_TO    = [m.strip() for m in os.environ["MAIL_TO"].split(",")]
 
 REF_PRICE = 69.99
 
@@ -34,19 +35,6 @@ CURRENCY_MAP = {
     "zł": "PLN",
 }
 
-# Mappa dominio Amazon → codice marketplace Keepa
-KEEPA_DOMAIN = {
-    "amazon.it":     3,   # Italy
-    "amazon.de":     3,   # Germany (stessa API, locale diverso)
-    "amazon.fr":     4,   # France
-    "amazon.es":     9,   # Spain
-    "amazon.nl":     8,   # Netherlands
-    "amazon.co.uk":  2,   # UK
-    "amazon.se":     5,   # Sweden
-    "amazon.pl":     11,  # Poland
-}
-
-# Mappa dominio → valuta
 AMAZON_CURRENCY = {
     "amazon.co.uk": "GBP",
     "amazon.se":    "SEK",
@@ -68,104 +56,44 @@ SOURCES = [
     {"label": "Kippy.eu DE – CAT", "url": "https://www.kippy.eu/de/product/kippy-cat", "type": "kippy"},
     {"label": "Kippy.eu FR – CAT", "url": "https://www.kippy.eu/fr/product/kippy-cat", "type": "kippy"},
     # Amazon DOG
-    {"label": "Amazon IT – DOG", "url": "https://www.amazon.it/dp/B0DN71S69G",    "type": "amazon", "asin": "B0DN71S69G"},
-    {"label": "Amazon DE – DOG", "url": "https://www.amazon.de/dp/B0DN71S69G",    "type": "amazon", "asin": "B0DN71S69G"},
-    {"label": "Amazon FR – DOG", "url": "https://www.amazon.fr/dp/B0DN71S69G",    "type": "amazon", "asin": "B0DN71S69G"},
-    {"label": "Amazon ES – DOG", "url": "https://www.amazon.es/dp/B0DN71S69G",    "type": "amazon", "asin": "B0DN71S69G"},
-    {"label": "Amazon NL – DOG", "url": "https://www.amazon.nl/dp/B0DN71S69G",    "type": "amazon", "asin": "B0DN71S69G"},
-    {"label": "Amazon UK – DOG", "url": "https://www.amazon.co.uk/dp/B0DN71S69G", "type": "amazon", "asin": "B0DN71S69G"},
-    {"label": "Amazon SE – DOG", "url": "https://www.amazon.se/dp/B0DN71S69G",    "type": "amazon", "asin": "B0DN71S69G"},
-    {"label": "Amazon PL – DOG", "url": "https://www.amazon.pl/dp/B0DN71S69G",    "type": "amazon", "asin": "B0DN71S69G"},
+    {"label": "Amazon IT – DOG", "url": "https://www.amazon.it/dp/B0DN71S69G",    "type": "amazon"},
+    {"label": "Amazon DE – DOG", "url": "https://www.amazon.de/dp/B0DN71S69G",    "type": "amazon"},
+    {"label": "Amazon FR – DOG", "url": "https://www.amazon.fr/dp/B0DN71S69G",    "type": "amazon"},
+    {"label": "Amazon ES – DOG", "url": "https://www.amazon.es/dp/B0DN71S69G",    "type": "amazon"},
+    {"label": "Amazon NL – DOG", "url": "https://www.amazon.nl/dp/B0DN71S69G",    "type": "amazon"},
+    {"label": "Amazon UK – DOG", "url": "https://www.amazon.co.uk/dp/B0DN71S69G", "type": "amazon"},
+    {"label": "Amazon SE – DOG", "url": "https://www.amazon.se/dp/B0DN71S69G",    "type": "amazon"},
+    {"label": "Amazon PL – DOG", "url": "https://www.amazon.pl/dp/B0DN71S69G",    "type": "amazon"},
     # Amazon CAT
-    {"label": "Amazon IT – CAT", "url": "https://www.amazon.it/dp/B0FXFX2L1S",    "type": "amazon", "asin": "B0FXFX2L1S"},
-    {"label": "Amazon DE – CAT", "url": "https://www.amazon.de/dp/B0FXFX2L1S",    "type": "amazon", "asin": "B0FXFX2L1S"},
-    {"label": "Amazon FR – CAT", "url": "https://www.amazon.fr/dp/B0FXFX2L1S",    "type": "amazon", "asin": "B0FXFX2L1S"},
-    {"label": "Amazon ES – CAT", "url": "https://www.amazon.es/dp/B0FXFX2L1S",    "type": "amazon", "asin": "B0FXFX2L1S"},
-    {"label": "Amazon NL – CAT", "url": "https://www.amazon.nl/dp/B0FXFX2L1S",    "type": "amazon", "asin": "B0FXFX2L1S"},
-    {"label": "Amazon UK – CAT", "url": "https://www.amazon.co.uk/dp/B0FXFX2L1S", "type": "amazon", "asin": "B0FXFX2L1S"},
-    {"label": "Amazon SE – CAT", "url": "https://www.amazon.se/dp/B0FXFX2L1S",    "type": "amazon", "asin": "B0FXFX2L1S"},
-    {"label": "Amazon PL – CAT", "url": "https://www.amazon.pl/dp/B0FXFX2L1S",    "type": "amazon", "asin": "B0FXFX2L1S"},
+    {"label": "Amazon IT – CAT", "url": "https://www.amazon.it/dp/B0FXFX2L1S",    "type": "amazon"},
+    {"label": "Amazon DE – CAT", "url": "https://www.amazon.de/dp/B0FXFX2L1S",    "type": "amazon"},
+    {"label": "Amazon FR – CAT", "url": "https://www.amazon.fr/dp/B0FXFX2L1S",    "type": "amazon"},
+    {"label": "Amazon ES – CAT", "url": "https://www.amazon.es/dp/B0FXFX2L1S",    "type": "amazon"},
+    {"label": "Amazon NL – CAT", "url": "https://www.amazon.nl/dp/B0FXFX2L1S",    "type": "amazon"},
+    {"label": "Amazon UK – CAT", "url": "https://www.amazon.co.uk/dp/B0FXFX2L1S", "type": "amazon"},
+    {"label": "Amazon SE – CAT", "url": "https://www.amazon.se/dp/B0FXFX2L1S",    "type": "amazon"},
+    {"label": "Amazon PL – CAT", "url": "https://www.amazon.pl/dp/B0FXFX2L1S",    "type": "amazon"},
 ]
 
-# ── Keepa: carica tutti gli ASIN in batch ────────────────────────
-def fetch_keepa_prices():
-    """
-    Restituisce un dizionario:
-    { (asin, domain_int): {"price": float, "currency": str, "available": str, "raw": str} }
-    Keepa consente batch per dominio → raggruppiamo per dominio.
-    """
-    keepa_api = keepa.Keepa(KEEPA_KEY)
-    results = {}
+AMAZON_PRICE_SELECTORS = [
+    ".a-price .a-offscreen",
+    "#corePrice_feature_div .a-offscreen",
+    "#apex_offerDisplay_desktop .a-offscreen",
+    "#newBuyBoxPrice",
+    "#priceblock_ourprice",
+    "#priceblock_dealprice",
+]
 
-    # Raggruppa le sorgenti Amazon per dominio Keepa
-    from urllib.parse import urlparse
-    from collections import defaultdict
-    domain_groups = defaultdict(list)
-    for s in SOURCES:
-        if s["type"] != "amazon":
-            continue
-        host = urlparse(s["url"]).netloc.replace("www.", "")
-        domain_int = KEEPA_DOMAIN.get(host)
-        if domain_int is None:
-            print(f"  ⚠️ Dominio Keepa non mappato: {host}")
-            continue
-        domain_groups[domain_int].append(s)
-
-    for domain_int, sources in domain_groups.items():
-        asins = list({s["asin"] for s in sources})
-        try:
-            print(f"  📡 Keepa query: dominio={domain_int}, asins={asins}")
-            products = keepa_api.query(asins, domain=domain_int, history=False)
-        except Exception as e:
-            print(f"  ❌ Keepa errore dominio {domain_int}: {e}")
-            for s in sources:
-                results[(s["asin"], domain_int)] = {
-                    "price": None, "currency": "EUR",
-                    "available": "Errore Keepa", "raw": "N/D"
-                }
-            continue
-
-        for prod in products:
-            asin = prod.get("asin", "")
-            # Prezzo corrente: Keepa usa AMAZON (venduto da Amazon) o NEW (terze parti)
-            # I valori sono in centesimi * 10 (quindi dividiamo per 100)
-            raw_price = None
-            for price_type in ["AMAZON", "NEW"]:
-                data = prod.get("data", {}).get(price_type, [])
-                # L'ultimo valore non-negativo è il prezzo corrente
-                valid = [v for v in (data or []) if v and v > 0]
-                if valid:
-                    raw_price = valid[-1] / 100.0
-                    break
-
-            # Disponibilità
-            avail = "Disponibile" if raw_price else "Non disponibile"
-
-            # Valuta basata sul dominio
-            host_map = {v: k for k, v in KEEPA_DOMAIN.items()}
-            host = host_map.get(domain_int, "")
-            currency = AMAZON_CURRENCY.get(host, "EUR")
-
-            results[(asin, domain_int)] = {
-                "price":     raw_price,
-                "currency":  currency,
-                "available": avail,
-                "raw":       f"{raw_price:.2f} {currency}" if raw_price else "N/D"
-            }
-
-    return results
-
-
-# ── Scraping kippy.eu ────────────────────────────────────────────
+# ── Scraping kippy.eu (requests + BS4) ──────────────────────────
 def scrape_kippy(source):
     time.sleep(2)
     try:
-        r = requests.get(source["url"], headers=HEADERS, timeout=15)
+        r    = requests.get(source["url"], headers=HEADERS, timeout=15)
         soup = BeautifulSoup(r.text, "lxml")
 
         el = soup.select_one("span.prezzo-cnt-cls")
         if el:
-            # Itera i text node diretti: il primo con un numero è il prezzo prodotto
+            # Itera i text node diretti: il primo col numero è il prezzo prodotto
             # (esclude il tag <a> figlio che contiene prezzi abbonamento)
             for text_node in el.strings:
                 m = re.search(r'([€£$])\s*(\d+[.,]\d+)', text_node)
@@ -178,7 +106,7 @@ def scrape_kippy(source):
                     return {"price": price, "currency": cur,
                             "available": avail, "raw": f"{symbol}{price:.2f}"}
 
-        # Fallback generico
+        # Fallback generico sulla pagina
         for tag in soup.find_all(string=re.compile(r'[€£$]\s*\d+[.,]\d+')):
             m = re.search(r'([€£$])\s*(\d+[.,]\d+)', tag)
             if m:
@@ -190,12 +118,101 @@ def scrape_kippy(source):
                 return {"price": price, "currency": cur,
                         "available": avail, "raw": f"{symbol}{price:.2f}"}
 
-        print(f"  ⚠️ Prezzo non trovato per {source['label']} (status: {r.status_code})")
+        print(f"  ⚠️ Prezzo non trovato: {source['label']} (HTTP {r.status_code})")
 
     except Exception as e:
-        print(f"  ❌ ERRORE {source['label']}: {e}")
+        print(f"  ❌ ERRORE kippy {source['label']}: {e}")
 
     return {"price": None, "currency": "EUR", "available": "Errore", "raw": "N/D"}
+
+
+# ── Parsing HTML Amazon (condiviso) ─────────────────────────────
+def _parse_amazon_html(html, url):
+    host     = urlparse(url).netloc.replace("www.", "")
+    currency = AMAZON_CURRENCY.get(host, "EUR")
+    soup     = BeautifulSoup(html, "lxml")
+
+    # Rilevamento blocco
+    if "captcha" in html.lower() or "robot check" in html.lower():
+        print(f"  ⚠️ CAPTCHA rilevato ({host})")
+        return {"price": None, "currency": currency, "available": "Bloccato", "raw": "N/D"}
+
+    for sel in AMAZON_PRICE_SELECTORS:
+        el = soup.select_one(sel)
+        if el:
+            raw  = el.get_text(strip=True).rstrip(".")
+            nums = re.findall(r'\d+[.,]\d+', raw.replace(" ", ""))
+            if nums:
+                price    = float(nums[0].replace(",", "."))
+                avail_el = soup.select_one("#availability span")
+                avail    = avail_el.get_text(strip=True) if avail_el else "Disponibile"
+                return {"price": price, "currency": currency,
+                        "available": avail, "raw": raw}
+
+    return {"price": None, "currency": currency, "available": "Non trovato", "raw": "N/D"}
+
+
+# ── Scraping Amazon (browser condiviso) ─────────────────────────
+def scrape_all_amazon(sources, playwright_instance):
+    """
+    Riceve la lista delle sorgenti Amazon e un'istanza Playwright già aperta.
+    Usa un singolo browser con tab parallele (una alla volta per non fare spam).
+    Restituisce una lista di risultati nello stesso ordine di `sources`.
+    """
+    browser = playwright_instance.chromium.launch(headless=True)
+    context = browser.new_context(
+        user_agent=(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        locale="it-IT",
+        extra_http_headers={"Accept-Language": "it-IT,it;q=0.9,en;q=0.8"},
+        # Disabilita WebDriver flag per ridurre rilevamento bot
+        java_script_enabled=True,
+    )
+
+    # Nasconde il flag navigator.webdriver
+    context.add_init_script("""
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    """)
+
+    results = []
+    page    = context.new_page()
+
+    for source in sources:
+        print(f"  ▶ {source['label']}")
+        try:
+            page.goto(source["url"], wait_until="domcontentloaded", timeout=25000)
+
+            # Aspetta che compaia un selettore prezzo (o timeout dopo 8s)
+            try:
+                page.wait_for_selector(
+                    ", ".join(AMAZON_PRICE_SELECTORS),
+                    timeout=8000
+                )
+            except Exception:
+                pass  # Procede comunque, _parse troverà quello che c'è
+
+            html = page.content()
+            r    = _parse_amazon_html(html, source["url"])
+
+        except Exception as e:
+            print(f"  ❌ ERRORE Playwright {source['label']}: {e}")
+            host     = urlparse(source["url"]).netloc.replace("www.", "")
+            currency = AMAZON_CURRENCY.get(host, "EUR")
+            r        = {"price": None, "currency": currency,
+                        "available": "Errore", "raw": "N/D"}
+
+        r.update({"label": source["label"], "url": source["url"]})
+        results.append(r)
+        print(f"    → {r['raw']} | {r['available']}")
+
+        time.sleep(2)  # pausa tra una pagina e l'altra
+
+    page.close()
+    browser.close()
+    return results
 
 
 # ── Build email HTML ─────────────────────────────────────────────
@@ -203,19 +220,12 @@ def build_email(results):
     today = datetime.now().strftime("%d/%m/%Y %H:%M")
     fx    = {"EUR": 1.0, "GBP": 1.17, "SEK": 0.089, "PLN": 0.23}
 
-    anomalies = []
-    for r in results:
-        if r["price"]:
-            eur_eq = r["price"] * fx.get(r["currency"], 1)
-            if eur_eq < REF_PRICE - 5:
-                anomalies.append(r)
+    anomalies = [r for r in results
+                 if r["price"] and r["price"] * fx.get(r["currency"], 1) < REF_PRICE - 5]
 
     def row_color(r):
-        if not r["price"]:
-            return "#f5f5f5"
-        eur_eq = r["price"] * fx.get(r["currency"], 1)
-        if eur_eq < REF_PRICE - 5:
-            return "#fff3cd"   # giallo anomalia
+        if not r["price"]: return "#f5f5f5"
+        if r in anomalies: return "#fff3cd"
         return "#ffffff"
 
     rows = ""
@@ -235,10 +245,13 @@ def build_email(results):
 
     anomaly_block = ""
     if anomalies:
+        n     = len(anomalies)
         items = "".join(f"<li>{a['label']}: <b>{a['raw']}</b></li>" for a in anomalies)
         anomaly_block = f"""
-        <div style="background:#fff3cd;border:1px solid #ffc107;padding:12px;margin-bottom:20px;border-radius:6px">
-          <b>⚠️ {len(anomalies)} anomali{('a' if len(anomalies)==1 else 'e')} rilevat{('a' if len(anomalies)==1 else 'e')} (prezzo &lt; {REF_PRICE - 5:.2f} €):</b>
+        <div style="background:#fff3cd;border:1px solid #ffc107;padding:12px;
+                    margin-bottom:20px;border-radius:6px">
+          <b>⚠️ {n} anomali{'a' if n==1 else 'e'} rilevat{'a' if n==1 else 'e'}
+             (prezzo &lt; {REF_PRICE - 5:.2f} €):</b>
           <ul>{items}</ul>
         </div>"""
 
@@ -246,7 +259,8 @@ def build_email(results):
 <html><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;max-width:900px;margin:auto;padding:20px">
   <h2 style="color:#1a1a2e">📊 Kippy Price Monitor — {today}</h2>
-  <p>Prezzo di riferimento: <b>€ {REF_PRICE:.2f}</b> | Soglia anomalia: <b>€ {REF_PRICE - 5:.2f}</b></p>
+  <p>Prezzo di riferimento: <b>€ {REF_PRICE:.2f}</b> &nbsp;|&nbsp;
+     Soglia anomalia: <b>€ {REF_PRICE - 5:.2f}</b></p>
   {anomaly_block}
   <table border="0" cellspacing="0" cellpadding="0"
          style="width:100%;border-collapse:collapse;font-size:14px">
@@ -263,7 +277,7 @@ def build_email(results):
     <tbody>{rows}</tbody>
   </table>
   <p style="color:#999;font-size:12px;margin-top:20px">
-    Amazon: dati via Keepa API · Kippy.eu: scraping diretto
+    Amazon: Playwright headless · Kippy.eu: scraping diretto
   </p>
 </body></html>"""
 
@@ -273,7 +287,7 @@ def send_email(html_body, anomaly_count):
     today   = datetime.now().strftime("%d/%m/%Y")
     subject = f"Kippy Prezzi {today}"
     if anomaly_count > 0:
-        subject = f"[{anomaly_count} anomali{'a' if anomaly_count == 1 else 'e'}] " + subject
+        subject = f"[{anomaly_count} anomali{'a' if anomaly_count==1 else 'e'}] " + subject
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -292,30 +306,28 @@ def send_email(html_body, anomaly_count):
 if __name__ == "__main__":
     print(f"🚀 Avvio scraping — {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
-    # 1. Keepa batch per tutte le sorgenti Amazon
-    print("\n📡 Recupero prezzi Amazon via Keepa...")
-    from urllib.parse import urlparse
-    keepa_prices = fetch_keepa_prices()
+    kippy_sources  = [s for s in SOURCES if s["type"] == "kippy"]
+    amazon_sources = [s for s in SOURCES if s["type"] == "amazon"]
 
-    # 2. Scraping kippy.eu + merge Amazon da Keepa
-    results = []
-    for s in SOURCES:
+    # 1. Scraping Kippy.eu (requests, nessun browser)
+    print("\n🌐 Scraping Kippy.eu...")
+    kippy_results = []
+    for s in kippy_sources:
         print(f"  ▶ {s['label']}")
-        if s["type"] == "kippy":
-            r = scrape_kippy(s)
-        else:
-            # Amazon: recupera da cache Keepa già scaricata
-            host       = urlparse(s["url"]).netloc.replace("www.", "")
-            domain_int = KEEPA_DOMAIN.get(host)
-            r = keepa_prices.get((s["asin"], domain_int), {
-                "price": None, "currency": "EUR",
-                "available": "Non trovato", "raw": "N/D"
-            })
+        r = scrape_kippy(s)
         r.update({"label": s["label"], "url": s["url"]})
-        results.append(r)
+        kippy_results.append(r)
         print(f"    → {r['raw']} | {r['available']}")
 
-    # 3. Conta anomalie ed invia email
+    # 2. Scraping Amazon (un solo browser Playwright per tutti gli URL)
+    print("\n🛒 Scraping Amazon (browser condiviso)...")
+    with sync_playwright() as pw:
+        amazon_results = scrape_all_amazon(amazon_sources, pw)
+
+    # 3. Ricostruisce l'ordine originale (kippy prima, amazon dopo)
+    results = kippy_results + amazon_results
+
+    # 4. Calcola anomalie e invia email
     fx = {"EUR": 1.0, "GBP": 1.17, "SEK": 0.089, "PLN": 0.23}
     anomalies = sum(1 for r in results
                     if r["price"] and r["price"] * fx.get(r["currency"], 1) < REF_PRICE - 5)
