@@ -64,38 +64,44 @@ AMAZON_PRICE_SELECTORS = [
 # -- Parsing kippy.eu --
 def _parse_kippy_html(html, url):
     soup = BeautifulSoup(html, "lxml")
-    # Usa il selettore specifico del contenitore prezzo prodotto
-    el = soup.select_one("span.model-price span.prezzo-cnt-cls")
-    if not el:
-        el = soup.select_one("span.prezzo-cnt-cls")
 
-    if el:
-        # Itera SOLO i figli diretti che sono text node (NavigableString, name=None)
-        # In questo modo escludiamo il tag <a> che contiene prezzi abbonamento
+    # Cerca tutti gli span.prezzo-cnt-cls e prende quello col valore piu' alto
+    # (il prezzo prodotto e' sempre maggiore dei prezzi abbonamento mensile)
+    candidates = []
+    for el in soup.select("span.prezzo-cnt-cls"):
         for node in el.children:
             if node.name is None:
                 text = str(node).strip()
-                if not text:
-                    continue
-                # Formato "EUR 69.99" o "69.99 EUR"
-                m = re.search(r'(d+[.,]d+)', text)
+                m = re.search(r'(\d+[.,]\d+)', text)
                 if m:
-                    price = float(m.group(1).replace(',', '.'))
-                    # Determina valuta dal simbolo nel testo
-                    if "GBP" in text or "\xa3" in text:
-                        cur = "GBP"
-                    else:
-                        cur = "EUR"
-                    avail = "Disponibile" if soup.find(string=re.compile(
-                        r'Disponibil|In Stock|En stock|Auf Lager', re.I)) else "N/D"
-                    print(f"    [DEBUG kippy] text node: {text!r} -> {price} {cur}")
-                    return {"price": price, "currency": cur,
-                            "available": avail, "raw": f"{price:.2f} {cur}"}
-        # Se arriviamo qui, nessun text node valido trovato
-        print(f"    [DEBUG kippy] el trovato ma nessun text node con numero. Testo: {el.get_text()[:100]!r}")
-    else:
-        print(f"    [DEBUG kippy] selettore prezzo-cnt-cls non trovato nell'HTML")
+                    val = float(m.group(1).replace(',', '.'))
+                    candidates.append((val, text, el))
+                    print(f"    [DEBUG kippy] candidato: {text!r} -> {val}")
 
+    if candidates:
+        # Il prezzo del prodotto fisico e' il piu' alto tra i candidati
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        price, text, el = candidates[0]
+        # Determina valuta
+        cur = "GBP" if "GBP" in text or "\xa3" in text else "EUR"
+        avail = "Disponibile" if soup.find(string=re.compile(
+            r'Disponibil|In Stock|En stock|Auf Lager', re.I)) else "N/D"
+        print(f"    [DEBUG kippy] scelto: {price} {cur}")
+        return {"price": price, "currency": cur,
+                "available": avail, "raw": f"{price:.2f} {cur}"}
+
+    # Fallback: cerca qualsiasi prezzo nella pagina sopra 50 EUR
+    # (il prezzo prodotto e' certamente > 50, i piani mensili < 15)
+    for tag in soup.find_all(string=re.compile(r'\d+[.,]\d+')):
+        m = re.search(r'(\d+[.,]\d+)', str(tag))
+        if m:
+            val = float(m.group(1).replace(',', '.'))
+            if val >= 50:
+                print(f"    [DEBUG kippy] fallback trovato: {val}")
+                return {"price": val, "currency": "EUR",
+                        "available": "N/D", "raw": f"{val:.2f} EUR"}
+
+    print(f"    [DEBUG kippy] nessun prezzo trovato")
     return {"price": None, "currency": "EUR", "available": "Non trovato", "raw": "N/D"}
 
 
@@ -127,10 +133,10 @@ def _parse_amazon_html(html, url):
 
 
 # -- Navigazione con retry --
-def _goto_with_retry(page, url, retries=2):
+def _goto_with_retry(page, url, retries=2, wait_until="networkidle"):
     for attempt in range(retries + 1):
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            page.goto(url, wait_until=wait_until, timeout=45000)
             return True
         except Exception as e:
             if attempt < retries:
@@ -156,7 +162,7 @@ def run_all_scraping():
 
     with sync_playwright() as pw:
 
-        # 1. Kippy.eu senza proxy
+        # 1. Kippy.eu - networkidle per attendere JS completo
         print("\nScraping Kippy.eu...")
         browser_k = pw.chromium.launch(headless=True, args=common_args)
         ctx_k = browser_k.new_context(
@@ -174,11 +180,10 @@ def run_all_scraping():
 
         for s in kippy_sources:
             print(f"  {s['label']}")
-            if _goto_with_retry(page_k, s["url"]):
-                try:
-                    page_k.wait_for_selector("span.prezzo-cnt-cls", timeout=8000)
-                except Exception:
-                    pass
+            # networkidle: aspetta che il JS abbia finito di aggiornare i prezzi
+            if _goto_with_retry(page_k, s["url"], wait_until="networkidle"):
+                # Pausa extra per sicurezza dopo networkidle
+                time.sleep(2)
                 r = _parse_kippy_html(page_k.content(), s["url"])
             else:
                 r = {"price": None, "currency": "EUR", "available": "Errore", "raw": "N/D"}
@@ -190,13 +195,13 @@ def run_all_scraping():
         page_k.close()
         browser_k.close()
 
-        # 2. Amazon con proxy Webshare porta 10000
-        print("\nScraping Amazon (Webshare proxy porta 10000)...")
+        # 2. Amazon con proxy Webshare SOCKS5 porta 1080
+        print("\nScraping Amazon (Webshare SOCKS5 porta 1080)...")
         browser_a = pw.chromium.launch(
             headless=True,
             args=common_args,
             proxy={
-                "server":   "http://proxy.webshare.io:10000",
+                "server":   "socks5://proxy.webshare.io:1080",
                 "username": PROXY_USER,
                 "password": PROXY_PASS,
             },
@@ -217,7 +222,7 @@ def run_all_scraping():
 
         for s in amazon_sources:
             print(f"  {s['label']}")
-            if _goto_with_retry(page_a, s["url"]):
+            if _goto_with_retry(page_a, s["url"], wait_until="domcontentloaded"):
                 try:
                     page_a.wait_for_selector(
                         ", ".join(AMAZON_PRICE_SELECTORS), timeout=8000
@@ -298,7 +303,7 @@ def build_email(results):
         f"<th style='padding:8px 12px;text-align:left'>URL</th>"
         f"</tr></thead><tbody>{rows}</tbody></table>"
         f"<p style='color:#999;font-size:12px;margin-top:20px'>"
-        f"Amazon: Playwright + Webshare | Kippy.eu: Playwright diretto</p>"
+        f"Amazon: Playwright + Webshare SOCKS5 | Kippy.eu: Playwright networkidle</p>"
         f"</body></html>"
     )
 
