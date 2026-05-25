@@ -3,7 +3,7 @@ name: Kippy Daily Price Monitor
 on:
   schedule:
     - cron: '0 7 * * *'   # ogni giorno alle 08:00 ora italiana (07:00 UTC)
-  workflow_dispatch:       # permette avvio manuale dal browser
+  workflow_dispatch:        # permette avvio manuale dal browser
 
 jobs:
   monitor:
@@ -18,12 +18,15 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: playwright install chromium --with-deps
 
       - name: Run price scraper
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_PASS: ${{ secrets.GMAIL_PASS }}
-          MAIL_TO: ${{ secrets.MAIL_TO }}
+          MAIL_TO:    ${{ secrets.MAIL_TO }}
         run: python scraper.py
