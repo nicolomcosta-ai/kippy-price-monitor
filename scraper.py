@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
-# ── Configurazione ──────────────────────────────────────────────
+# -- Configurazione --
 GMAIL_USER  = os.environ["GMAIL_USER"]
 GMAIL_PASS  = os.environ["GMAIL_PASS"]
 MAIL_TO     = [m.strip() for m in os.environ["MAIL_TO"].split(",")]
@@ -23,36 +23,32 @@ AMAZON_CURRENCY = {
 }
 
 SOURCES = [
-    # Kippy.eu DOG
-    {"label": "Kippy.eu IT – DOG", "url": "https://www.kippy.eu/it/product/kippy-dog-green", "type": "kippy"},
-    {"label": "Kippy.eu EN – DOG", "url": "https://www.kippy.eu/en/product/kippy-dog-green", "type": "kippy"},
-    {"label": "Kippy.eu ES – DOG", "url": "https://www.kippy.eu/es/product/kippy-dog-green", "type": "kippy"},
-    {"label": "Kippy.eu DE – DOG", "url": "https://www.kippy.eu/de/product/kippy-dog-green", "type": "kippy"},
-    {"label": "Kippy.eu FR – DOG", "url": "https://www.kippy.eu/fr/product/kippy-dog-green", "type": "kippy"},
-    # Kippy.eu CAT
-    {"label": "Kippy.eu IT – CAT", "url": "https://www.kippy.eu/it/product/kippy-cat", "type": "kippy"},
-    {"label": "Kippy.eu EN – CAT", "url": "https://www.kippy.eu/en/product/kippy-cat", "type": "kippy"},
-    {"label": "Kippy.eu ES – CAT", "url": "https://www.kippy.eu/es/product/kippy-cat", "type": "kippy"},
-    {"label": "Kippy.eu DE – CAT", "url": "https://www.kippy.eu/de/product/kippy-cat", "type": "kippy"},
-    {"label": "Kippy.eu FR – CAT", "url": "https://www.kippy.eu/fr/product/kippy-cat", "type": "kippy"},
-    # Amazon DOG
-    {"label": "Amazon IT – DOG", "url": "https://www.amazon.it/dp/B0DN71S69G",    "type": "amazon"},
-    {"label": "Amazon DE – DOG", "url": "https://www.amazon.de/dp/B0DN71S69G",    "type": "amazon"},
-    {"label": "Amazon FR – DOG", "url": "https://www.amazon.fr/dp/B0DN71S69G",    "type": "amazon"},
-    {"label": "Amazon ES – DOG", "url": "https://www.amazon.es/dp/B0DN71S69G",    "type": "amazon"},
-    {"label": "Amazon NL – DOG", "url": "https://www.amazon.nl/dp/B0DN71S69G",    "type": "amazon"},
-    {"label": "Amazon UK – DOG", "url": "https://www.amazon.co.uk/dp/B0DN71S69G", "type": "amazon"},
-    {"label": "Amazon SE – DOG", "url": "https://www.amazon.se/dp/B0DN71S69G",    "type": "amazon"},
-    {"label": "Amazon PL – DOG", "url": "https://www.amazon.pl/dp/B0DN71S69G",    "type": "amazon"},
-    # Amazon CAT
-    {"label": "Amazon IT – CAT", "url": "https://www.amazon.it/dp/B0FXFX2L1S",    "type": "amazon"},
-    {"label": "Amazon DE – CAT", "url": "https://www.amazon.de/dp/B0FXFX2L1S",    "type": "amazon"},
-    {"label": "Amazon FR – CAT", "url": "https://www.amazon.fr/dp/B0FXFX2L1S",    "type": "amazon"},
-    {"label": "Amazon ES – CAT", "url": "https://www.amazon.es/dp/B0FXFX2L1S",    "type": "amazon"},
-    {"label": "Amazon NL – CAT", "url": "https://www.amazon.nl/dp/B0FXFX2L1S",    "type": "amazon"},
-    {"label": "Amazon UK – CAT", "url": "https://www.amazon.co.uk/dp/B0FXFX2L1S", "type": "amazon"},
-    {"label": "Amazon SE – CAT", "url": "https://www.amazon.se/dp/B0FXFX2L1S",    "type": "amazon"},
-    {"label": "Amazon PL – CAT", "url": "https://www.amazon.pl/dp/B0FXFX2L1S",    "type": "amazon"},
+    {"label": "Kippy.eu IT - DOG", "url": "https://www.kippy.eu/it/product/kippy-dog-green", "type": "kippy"},
+    {"label": "Kippy.eu EN - DOG", "url": "https://www.kippy.eu/en/product/kippy-dog-green", "type": "kippy"},
+    {"label": "Kippy.eu ES - DOG", "url": "https://www.kippy.eu/es/product/kippy-dog-green", "type": "kippy"},
+    {"label": "Kippy.eu DE - DOG", "url": "https://www.kippy.eu/de/product/kippy-dog-green", "type": "kippy"},
+    {"label": "Kippy.eu FR - DOG", "url": "https://www.kippy.eu/fr/product/kippy-dog-green", "type": "kippy"},
+    {"label": "Kippy.eu IT - CAT", "url": "https://www.kippy.eu/it/product/kippy-cat", "type": "kippy"},
+    {"label": "Kippy.eu EN - CAT", "url": "https://www.kippy.eu/en/product/kippy-cat", "type": "kippy"},
+    {"label": "Kippy.eu ES - CAT", "url": "https://www.kippy.eu/es/product/kippy-cat", "type": "kippy"},
+    {"label": "Kippy.eu DE - CAT", "url": "https://www.kippy.eu/de/product/kippy-cat", "type": "kippy"},
+    {"label": "Kippy.eu FR - CAT", "url": "https://www.kippy.eu/fr/product/kippy-cat", "type": "kippy"},
+    {"label": "Amazon IT - DOG", "url": "https://www.amazon.it/dp/B0DN71S69G",    "type": "amazon"},
+    {"label": "Amazon DE - DOG", "url": "https://www.amazon.de/dp/B0DN71S69G",    "type": "amazon"},
+    {"label": "Amazon FR - DOG", "url": "https://www.amazon.fr/dp/B0DN71S69G",    "type": "amazon"},
+    {"label": "Amazon ES - DOG", "url": "https://www.amazon.es/dp/B0DN71S69G",    "type": "amazon"},
+    {"label": "Amazon NL - DOG", "url": "https://www.amazon.nl/dp/B0DN71S69G",    "type": "amazon"},
+    {"label": "Amazon UK - DOG", "url": "https://www.amazon.co.uk/dp/B0DN71S69G", "type": "amazon"},
+    {"label": "Amazon SE - DOG", "url": "https://www.amazon.se/dp/B0DN71S69G",    "type": "amazon"},
+    {"label": "Amazon PL - DOG", "url": "https://www.amazon.pl/dp/B0DN71S69G",    "type": "amazon"},
+    {"label": "Amazon IT - CAT", "url": "https://www.amazon.it/dp/B0FXFX2L1S",    "type": "amazon"},
+    {"label": "Amazon DE - CAT", "url": "https://www.amazon.de/dp/B0FXFX2L1S",    "type": "amazon"},
+    {"label": "Amazon FR - CAT", "url": "https://www.amazon.fr/dp/B0FXFX2L1S",    "type": "amazon"},
+    {"label": "Amazon ES - CAT", "url": "https://www.amazon.es/dp/B0FXFX2L1S",    "type": "amazon"},
+    {"label": "Amazon NL - CAT", "url": "https://www.amazon.nl/dp/B0FXFX2L1S",    "type": "amazon"},
+    {"label": "Amazon UK - CAT", "url": "https://www.amazon.co.uk/dp/B0FXFX2L1S", "type": "amazon"},
+    {"label": "Amazon SE - CAT", "url": "https://www.amazon.se/dp/B0FXFX2L1S",    "type": "amazon"},
+    {"label": "Amazon PL - CAT", "url": "https://www.amazon.pl/dp/B0FXFX2L1S",    "type": "amazon"},
 ]
 
 AMAZON_PRICE_SELECTORS = [
@@ -64,46 +60,53 @@ AMAZON_PRICE_SELECTORS = [
     "#priceblock_dealprice",
 ]
 
-KIPPY_PRICE_SELECTOR = "span.prezzo-cnt-cls"
 
-
-# ── Parsing HTML kippy.eu ────────────────────────────────────────
+# -- Parsing kippy.eu --
 def _parse_kippy_html(html, url):
     soup = BeautifulSoup(html, "lxml")
-    el   = soup.select_one(KIPPY_PRICE_SELECTOR)
-    if el:
-        for text_node in el.strings:
-            m = re.search(r'([€£$])\s*(\d+[.,]\d+)', text_node)
-            if m:
-                symbol = m.group(1)
-                price  = float(m.group(2).replace(',', '.'))
-                cur    = {"€": "EUR", "£": "GBP", "$": "USD"}.get(symbol, "EUR")
-                avail  = "Disponibile" if soup.find(string=re.compile(
-                    r'Disponibil|In Stock|En stock|Auf Lager', re.I)) else "N/D"
-                return {"price": price, "currency": cur,
-                        "available": avail, "raw": f"{symbol}{price:.2f}"}
+    # Usa il selettore specifico del contenitore prezzo prodotto
+    el = soup.select_one("span.model-price span.prezzo-cnt-cls")
+    if not el:
+        el = soup.select_one("span.prezzo-cnt-cls")
 
-    # Fallback: primo prezzo trovato in pagina
-    for tag in soup.find_all(string=re.compile(r'[€£$]\s*\d+[.,]\d+')):
-        m = re.search(r'([€£$])\s*(\d+[.,]\d+)', tag)
-        if m:
-            symbol = m.group(1)
-            price  = float(m.group(2).replace(',', '.'))
-            cur    = {"€": "EUR", "£": "GBP", "$": "USD"}.get(symbol, "EUR")
-            return {"price": price, "currency": cur,
-                    "available": "N/D", "raw": f"{symbol}{price:.2f}"}
+    if el:
+        # Itera SOLO i figli diretti che sono text node (NavigableString, name=None)
+        # In questo modo escludiamo il tag <a> che contiene prezzi abbonamento
+        for node in el.children:
+            if node.name is None:
+                text = str(node).strip()
+                if not text:
+                    continue
+                # Formato "EUR 69.99" o "69.99 EUR"
+                m = re.search(r'(d+[.,]d+)', text)
+                if m:
+                    price = float(m.group(1).replace(',', '.'))
+                    # Determina valuta dal simbolo nel testo
+                    if "GBP" in text or "\xa3" in text:
+                        cur = "GBP"
+                    else:
+                        cur = "EUR"
+                    avail = "Disponibile" if soup.find(string=re.compile(
+                        r'Disponibil|In Stock|En stock|Auf Lager', re.I)) else "N/D"
+                    print(f"    [DEBUG kippy] text node: {text!r} -> {price} {cur}")
+                    return {"price": price, "currency": cur,
+                            "available": avail, "raw": f"{price:.2f} {cur}"}
+        # Se arriviamo qui, nessun text node valido trovato
+        print(f"    [DEBUG kippy] el trovato ma nessun text node con numero. Testo: {el.get_text()[:100]!r}")
+    else:
+        print(f"    [DEBUG kippy] selettore prezzo-cnt-cls non trovato nell'HTML")
 
     return {"price": None, "currency": "EUR", "available": "Non trovato", "raw": "N/D"}
 
 
-# ── Parsing HTML Amazon ──────────────────────────────────────────
+# -- Parsing Amazon --
 def _parse_amazon_html(html, url):
     host     = urlparse(url).netloc.replace("www.", "")
     currency = AMAZON_CURRENCY.get(host, "EUR")
     soup     = BeautifulSoup(html, "lxml")
 
     if "captcha" in html.lower() or "robot check" in html.lower():
-        print(f"    ⚠️  CAPTCHA rilevato ({host})")
+        print(f"    [DEBUG amazon] CAPTCHA ({host})")
         return {"price": None, "currency": currency, "available": "Bloccato", "raw": "N/D"}
 
     for sel in AMAZON_PRICE_SELECTORS:
@@ -115,13 +118,15 @@ def _parse_amazon_html(html, url):
                 price    = float(nums[0].replace(",", "."))
                 avail_el = soup.select_one("#availability span")
                 avail    = avail_el.get_text(strip=True) if avail_el else "Disponibile"
+                print(f"    [DEBUG amazon] {sel}: {raw}")
                 return {"price": price, "currency": currency,
                         "available": avail, "raw": raw}
 
+    print(f"    [DEBUG amazon] nessun selettore trovato ({host})")
     return {"price": None, "currency": currency, "available": "Non trovato", "raw": "N/D"}
 
 
-# ── Navigazione pagina con retry ─────────────────────────────────
+# -- Navigazione con retry --
 def _goto_with_retry(page, url, retries=2):
     for attempt in range(retries + 1):
         try:
@@ -129,24 +134,17 @@ def _goto_with_retry(page, url, retries=2):
             return True
         except Exception as e:
             if attempt < retries:
-                print(f"    ↩️  Retry {attempt+1} per {url}: {e}")
+                print(f"    Retry {attempt+1}: {e}")
                 time.sleep(3)
             else:
-                print(f"    ❌ Fallito dopo {retries+1} tentativi: {e}")
+                print(f"    Fallito dopo {retries+1} tentativi: {e}")
                 return False
 
 
-# ── Scraping principale (browser unico) ──────────────────────────
+# -- Scraping principale --
 def run_all_scraping():
-    """
-    Apre un solo browser Playwright con due contesti:
-      1. Senza proxy → Kippy.eu
-      2. Con proxy Webshare → Amazon
-    Restituisce i risultati nell'ordine originale di SOURCES.
-    """
     kippy_sources  = [s for s in SOURCES if s["type"] == "kippy"]
     amazon_sources = [s for s in SOURCES if s["type"] == "amazon"]
-
     results_kippy  = []
     results_amazon = []
 
@@ -157,8 +155,9 @@ def run_all_scraping():
     ]
 
     with sync_playwright() as pw:
-        # ── 1. Kippy.eu — senza proxy (non necessario) ──────────
-        print("\n🌐 Scraping Kippy.eu...")
+
+        # 1. Kippy.eu senza proxy
+        print("\nScraping Kippy.eu...")
         browser_k = pw.chromium.launch(headless=True, args=common_args)
         ctx_k = browser_k.new_context(
             user_agent=(
@@ -174,11 +173,10 @@ def run_all_scraping():
         page_k = ctx_k.new_page()
 
         for s in kippy_sources:
-            print(f"  ▶ {s['label']}")
+            print(f"  {s['label']}")
             if _goto_with_retry(page_k, s["url"]):
-                # Attende che il selettore prezzo sia presente
                 try:
-                    page_k.wait_for_selector(KIPPY_PRICE_SELECTOR, timeout=8000)
+                    page_k.wait_for_selector("span.prezzo-cnt-cls", timeout=8000)
                 except Exception:
                     pass
                 r = _parse_kippy_html(page_k.content(), s["url"])
@@ -186,19 +184,19 @@ def run_all_scraping():
                 r = {"price": None, "currency": "EUR", "available": "Errore", "raw": "N/D"}
             r.update({"label": s["label"], "url": s["url"]})
             results_kippy.append(r)
-            print(f"    → {r['raw']} | {r['available']}")
+            print(f"    -> {r['raw']} | {r['available']}")
             time.sleep(1)
 
         page_k.close()
         browser_k.close()
 
-        # ── 2. Amazon — con proxy Webshare rotante ───────────────
-        print("\n🛒 Scraping Amazon (proxy Webshare)...")
+        # 2. Amazon con proxy Webshare porta 10000
+        print("\nScraping Amazon (Webshare proxy porta 10000)...")
         browser_a = pw.chromium.launch(
             headless=True,
             args=common_args,
             proxy={
-                "server":   "http://proxy.webshare.io:80",
+                "server":   "http://proxy.webshare.io:10000",
                 "username": PROXY_USER,
                 "password": PROXY_PASS,
             },
@@ -218,7 +216,7 @@ def run_all_scraping():
         page_a = ctx_a.new_page()
 
         for s in amazon_sources:
-            print(f"  ▶ {s['label']}")
+            print(f"  {s['label']}")
             if _goto_with_retry(page_a, s["url"]):
                 try:
                     page_a.wait_for_selector(
@@ -233,17 +231,16 @@ def run_all_scraping():
                      "available": "Errore", "raw": "N/D"}
             r.update({"label": s["label"], "url": s["url"]})
             results_amazon.append(r)
-            print(f"    → {r['raw']} | {r['available']}")
+            print(f"    -> {r['raw']} | {r['available']}")
             time.sleep(2)
 
         page_a.close()
         browser_a.close()
 
-    # Ricostruisce ordine originale: Kippy prima, Amazon dopo
     return results_kippy + results_amazon
 
 
-# ── Build email HTML ─────────────────────────────────────────────
+# -- Build email --
 def build_email(results):
     today = datetime.now().strftime("%d/%m/%Y %H:%M")
     fx    = {"EUR": 1.0, "GBP": 1.17, "SEK": 0.089, "PLN": 0.23}
@@ -258,89 +255,82 @@ def build_email(results):
 
     rows = ""
     for r in results:
-        src  = "🛒 Amazon" if "Amazon" in r["label"] else "🌐 Kippy.eu"
+        src  = "Amazon" if "Amazon" in r["label"] else "Kippy.eu"
         bg   = row_color(r)
-        flag = "⚠️" if r in anomalies else ("✅" if r["price"] else "❌")
-        rows += f"""
-        <tr style="background:{bg}">
-          <td style="padding:6px 12px">{flag}</td>
-          <td style="padding:6px 12px">{src}</td>
-          <td style="padding:6px 12px">{r['label']}</td>
-          <td style="padding:6px 12px;font-weight:bold">{r['raw']}</td>
-          <td style="padding:6px 12px">{r['available']}</td>
-          <td style="padding:6px 12px"><a href="{r['url']}">Link</a></td>
-        </tr>"""
+        flag = "!" if r in anomalies else ("OK" if r["price"] else "X")
+        rows += (
+            f"<tr style='background:{bg}'>"
+            f"<td style='padding:6px 12px'>{flag}</td>"
+            f"<td style='padding:6px 12px'>{src}</td>"
+            f"<td style='padding:6px 12px'>{r['label']}</td>"
+            f"<td style='padding:6px 12px;font-weight:bold'>{r['raw']}</td>"
+            f"<td style='padding:6px 12px'>{r['available']}</td>"
+            f"<td style='padding:6px 12px'><a href='{r['url']}'>Link</a></td>"
+            f"</tr>"
+        )
 
     anomaly_block = ""
     if anomalies:
         n     = len(anomalies)
         items = "".join(f"<li>{a['label']}: <b>{a['raw']}</b></li>" for a in anomalies)
-        anomaly_block = f"""
-        <div style="background:#fff3cd;border:1px solid #ffc107;padding:12px;
-                    margin-bottom:20px;border-radius:6px">
-          <b>⚠️ {n} anomali{'a' if n==1 else 'e'} rilevat{'a' if n==1 else 'e'}
-             (prezzo &lt; {REF_PRICE - 5:.2f} €):</b>
-          <ul>{items}</ul>
-        </div>"""
+        anomaly_block = (
+            f"<div style='background:#fff3cd;border:1px solid #ffc107;"
+            f"padding:12px;margin-bottom:20px;border-radius:6px'>"
+            f"<b>{n} anomalie (prezzo &lt; {REF_PRICE-5:.2f} EUR):</b>"
+            f"<ul>{items}</ul></div>"
+        )
 
-    return f"""<!DOCTYPE html>
-<html><head><meta charset="UTF-8"></head>
-<body style="font-family:Arial,sans-serif;max-width:900px;margin:auto;padding:20px">
-  <h2 style="color:#1a1a2e">📊 Kippy Price Monitor — {today}</h2>
-  <p>Prezzo di riferimento: <b>€ {REF_PRICE:.2f}</b> &nbsp;|&nbsp;
-     Soglia anomalia: <b>€ {REF_PRICE - 5:.2f}</b></p>
-  {anomaly_block}
-  <table border="0" cellspacing="0" cellpadding="0"
-         style="width:100%;border-collapse:collapse;font-size:14px">
-    <thead>
-      <tr style="background:#1a1a2e;color:#fff">
-        <th style="padding:8px 12px"></th>
-        <th style="padding:8px 12px;text-align:left">Fonte</th>
-        <th style="padding:8px 12px;text-align:left">Mercato</th>
-        <th style="padding:8px 12px;text-align:left">Prezzo</th>
-        <th style="padding:8px 12px;text-align:left">Disponibilità</th>
-        <th style="padding:8px 12px;text-align:left">URL</th>
-      </tr>
-    </thead>
-    <tbody>{rows}</tbody>
-  </table>
-  <p style="color:#999;font-size:12px;margin-top:20px">
-    Amazon: Playwright + Webshare proxy · Kippy.eu: Playwright diretto
-  </p>
-</body></html>"""
+    return (
+        "<!DOCTYPE html><html><head><meta charset='UTF-8'></head>"
+        f"<body style='font-family:Arial,sans-serif;max-width:900px;margin:auto;padding:20px'>"
+        f"<h2>Kippy Price Monitor - {today}</h2>"
+        f"<p>Prezzo riferimento: <b>EUR {REF_PRICE:.2f}</b> | "
+        f"Soglia anomalia: <b>EUR {REF_PRICE-5:.2f}</b></p>"
+        f"{anomaly_block}"
+        f"<table border='0' cellspacing='0' cellpadding='0' "
+        f"style='width:100%;border-collapse:collapse;font-size:14px'>"
+        f"<thead><tr style='background:#1a1a2e;color:#fff'>"
+        f"<th style='padding:8px 12px'></th>"
+        f"<th style='padding:8px 12px;text-align:left'>Fonte</th>"
+        f"<th style='padding:8px 12px;text-align:left'>Mercato</th>"
+        f"<th style='padding:8px 12px;text-align:left'>Prezzo</th>"
+        f"<th style='padding:8px 12px;text-align:left'>Disponibilita</th>"
+        f"<th style='padding:8px 12px;text-align:left'>URL</th>"
+        f"</tr></thead><tbody>{rows}</tbody></table>"
+        f"<p style='color:#999;font-size:12px;margin-top:20px'>"
+        f"Amazon: Playwright + Webshare | Kippy.eu: Playwright diretto</p>"
+        f"</body></html>"
+    )
 
 
-# ── Invio email ───────────────────────────────────────────────────
+# -- Invio email --
 def send_email(html_body, anomaly_count):
     today   = datetime.now().strftime("%d/%m/%Y")
     subject = f"Kippy Prezzi {today}"
     if anomaly_count > 0:
-        subject = f"[{anomaly_count} anomali{'a' if anomaly_count==1 else 'e'}] " + subject
+        subject = f"[{anomaly_count} anomalie] " + subject
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = GMAIL_USER
     msg["To"]      = ", ".join(MAIL_TO)
-    msg.attach(MIMEText(f"Kippy Price Monitor - Report {today}\nVedi la versione HTML.", "plain"))
+    msg.attach(MIMEText(f"Kippy Price Monitor - {today}", "plain"))
     msg.attach(MIMEText(html_body, "html"))
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
         s.login(GMAIL_USER, GMAIL_PASS)
         s.sendmail(GMAIL_USER, MAIL_TO, msg.as_string())
-    print(f"✅ Email inviata a: {MAIL_TO}")
+    print(f"Email inviata a: {MAIL_TO}")
 
 
-# ── Main ──────────────────────────────────────────────────────────
+# -- Main --
 if __name__ == "__main__":
-    print(f"🚀 Avvio scraping — {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-
+    print(f"Avvio scraping - {datetime.now().strftime('%d/%m/%Y %H:%M')}")
     results = run_all_scraping()
-
     fx = {"EUR": 1.0, "GBP": 1.17, "SEK": 0.089, "PLN": 0.23}
     anomalies = sum(1 for r in results
                     if r["price"] and r["price"] * fx.get(r["currency"], 1) < REF_PRICE - 5)
-
-    print(f"\n⚠️  Anomalie rilevate: {anomalies}")
+    print(f"\nAnomalie: {anomalies}")
     html_body = build_email(results)
     send_email(html_body, anomalies)
-    print("✅ Done.")
+    print("Done.")
