@@ -65,8 +65,8 @@ AMAZON_PRICE_SELECTORS = [
 def _parse_kippy_html(html, url):
     soup = BeautifulSoup(html, "lxml")
 
-    # Cerca tutti gli span.prezzo-cnt-cls e prende quello col valore piu' alto
-    # (il prezzo prodotto e' sempre maggiore dei prezzi abbonamento mensile)
+    # Raccoglie tutti i valori numerici nei text node di span.prezzo-cnt-cls
+    # e prende il piu' alto (prezzo prodotto > prezzi abbonamento)
     candidates = []
     for el in soup.select("span.prezzo-cnt-cls"):
         for node in el.children:
@@ -79,10 +79,8 @@ def _parse_kippy_html(html, url):
                     print(f"    [DEBUG kippy] candidato: {text!r} -> {val}")
 
     if candidates:
-        # Il prezzo del prodotto fisico e' il piu' alto tra i candidati
         candidates.sort(key=lambda x: x[0], reverse=True)
         price, text, el = candidates[0]
-        # Determina valuta
         cur = "GBP" if "GBP" in text or "\xa3" in text else "EUR"
         avail = "Disponibile" if soup.find(string=re.compile(
             r'Disponibil|In Stock|En stock|Auf Lager', re.I)) else "N/D"
@@ -90,14 +88,13 @@ def _parse_kippy_html(html, url):
         return {"price": price, "currency": cur,
                 "available": avail, "raw": f"{price:.2f} {cur}"}
 
-    # Fallback: cerca qualsiasi prezzo nella pagina sopra 50 EUR
-    # (il prezzo prodotto e' certamente > 50, i piani mensili < 15)
+    # Fallback: qualsiasi numero >= 50 nella pagina
     for tag in soup.find_all(string=re.compile(r'\d+[.,]\d+')):
         m = re.search(r'(\d+[.,]\d+)', str(tag))
         if m:
             val = float(m.group(1).replace(',', '.'))
             if val >= 50:
-                print(f"    [DEBUG kippy] fallback trovato: {val}")
+                print(f"    [DEBUG kippy] fallback: {val}")
                 return {"price": val, "currency": "EUR",
                         "available": "N/D", "raw": f"{val:.2f} EUR"}
 
@@ -133,7 +130,7 @@ def _parse_amazon_html(html, url):
 
 
 # -- Navigazione con retry --
-def _goto_with_retry(page, url, retries=2, wait_until="networkidle"):
+def _goto_with_retry(page, url, retries=2, wait_until="domcontentloaded"):
     for attempt in range(retries + 1):
         try:
             page.goto(url, wait_until=wait_until, timeout=45000)
@@ -180,9 +177,7 @@ def run_all_scraping():
 
         for s in kippy_sources:
             print(f"  {s['label']}")
-            # networkidle: aspetta che il JS abbia finito di aggiornare i prezzi
             if _goto_with_retry(page_k, s["url"], wait_until="networkidle"):
-                # Pausa extra per sicurezza dopo networkidle
                 time.sleep(2)
                 r = _parse_kippy_html(page_k.content(), s["url"])
             else:
@@ -195,13 +190,16 @@ def run_all_scraping():
         page_k.close()
         browser_k.close()
 
-        # 2. Amazon con proxy Webshare SOCKS5 porta 1080
-        print("\nScraping Amazon (Webshare SOCKS5 porta 1080)...")
+        # 2. Amazon - Webshare HTTP rotating proxy porta 8822
+        # Nota: Chromium non supporta autenticazione SOCKS5.
+        # Webshare espone anche un endpoint HTTP rotating su porta 8822
+        # che supporta autenticazione HTTP standard (Basic Auth nel server param).
+        print("\nScraping Amazon (Webshare HTTP rotating porta 8822)...")
         browser_a = pw.chromium.launch(
             headless=True,
             args=common_args,
             proxy={
-                "server":   "socks5://proxy.webshare.io:1080",
+                "server":   "http://rotating-proxy.webshare.io:8822",
                 "username": PROXY_USER,
                 "password": PROXY_PASS,
             },
@@ -303,7 +301,7 @@ def build_email(results):
         f"<th style='padding:8px 12px;text-align:left'>URL</th>"
         f"</tr></thead><tbody>{rows}</tbody></table>"
         f"<p style='color:#999;font-size:12px;margin-top:20px'>"
-        f"Amazon: Playwright + Webshare SOCKS5 | Kippy.eu: Playwright networkidle</p>"
+        f"Amazon: Playwright + Webshare HTTP rotating | Kippy.eu: Playwright networkidle</p>"
         f"</body></html>"
     )
 
