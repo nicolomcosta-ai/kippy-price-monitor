@@ -4,36 +4,17 @@ from email.mime.text import MIMEText
 from datetime import datetime
 from urllib.parse import urlparse
 
-import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
 # ── Configurazione ──────────────────────────────────────────────
-GMAIL_USER = os.environ["GMAIL_USER"]
-GMAIL_PASS = os.environ["GMAIL_PASS"]
-MAIL_TO    = [m.strip() for m in os.environ["MAIL_TO"].split(",")]
+GMAIL_USER  = os.environ["GMAIL_USER"]
+GMAIL_PASS  = os.environ["GMAIL_PASS"]
+MAIL_TO     = [m.strip() for m in os.environ["MAIL_TO"].split(",")]
+PROXY_USER  = os.environ["PROXY_USER"]
+PROXY_PASS  = os.environ["PROXY_PASS"]
 
 REF_PRICE = 69.99
-
-HEADERS = {
-    "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                       "AppleWebKit/537.36 (KHTML, like Gecko) "
-                       "Chrome/124.0.0.0 Safari/537.36",
-    "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
-    "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Encoding": "gzip, deflate, br",
-    "DNT":             "1",
-    "Connection":      "keep-alive",
-    "Upgrade-Insecure-Requests": "1",
-}
-
-CURRENCY_MAP = {
-    "€":  "EUR",
-    "£":  "GBP",
-    "$":  "USD",
-    "kr": "SEK",
-    "zł": "PLN",
-}
 
 AMAZON_CURRENCY = {
     "amazon.co.uk": "GBP",
@@ -41,7 +22,6 @@ AMAZON_CURRENCY = {
     "amazon.pl":    "PLN",
 }
 
-# ── URL da monitorare ────────────────────────────────────────────
 SOURCES = [
     # Kippy.eu DOG
     {"label": "Kippy.eu IT – DOG", "url": "https://www.kippy.eu/it/product/kippy-dog-green", "type": "kippy"},
@@ -84,57 +64,46 @@ AMAZON_PRICE_SELECTORS = [
     "#priceblock_dealprice",
 ]
 
-# ── Scraping kippy.eu (requests + BS4) ──────────────────────────
-def scrape_kippy(source):
-    time.sleep(2)
-    try:
-        r    = requests.get(source["url"], headers=HEADERS, timeout=15)
-        soup = BeautifulSoup(r.text, "lxml")
+KIPPY_PRICE_SELECTOR = "span.prezzo-cnt-cls"
 
-        el = soup.select_one("span.prezzo-cnt-cls")
-        if el:
-            # Itera i text node diretti: il primo col numero è il prezzo prodotto
-            # (esclude il tag <a> figlio che contiene prezzi abbonamento)
-            for text_node in el.strings:
-                m = re.search(r'([€£$])\s*(\d+[.,]\d+)', text_node)
-                if m:
-                    symbol = m.group(1)
-                    price  = float(m.group(2).replace(',', '.'))
-                    cur    = CURRENCY_MAP.get(symbol, "EUR")
-                    avail  = "Disponibile" if soup.find(string=re.compile(
-                        r'Disponibil|In Stock|En stock|Auf Lager', re.I)) else "N/D"
-                    return {"price": price, "currency": cur,
-                            "available": avail, "raw": f"{symbol}{price:.2f}"}
 
-        # Fallback generico sulla pagina
-        for tag in soup.find_all(string=re.compile(r'[€£$]\s*\d+[.,]\d+')):
-            m = re.search(r'([€£$])\s*(\d+[.,]\d+)', tag)
+# ── Parsing HTML kippy.eu ────────────────────────────────────────
+def _parse_kippy_html(html, url):
+    soup = BeautifulSoup(html, "lxml")
+    el   = soup.select_one(KIPPY_PRICE_SELECTOR)
+    if el:
+        for text_node in el.strings:
+            m = re.search(r'([€£$])\s*(\d+[.,]\d+)', text_node)
             if m:
                 symbol = m.group(1)
                 price  = float(m.group(2).replace(',', '.'))
-                cur    = CURRENCY_MAP.get(symbol, "EUR")
+                cur    = {"€": "EUR", "£": "GBP", "$": "USD"}.get(symbol, "EUR")
                 avail  = "Disponibile" if soup.find(string=re.compile(
                     r'Disponibil|In Stock|En stock|Auf Lager', re.I)) else "N/D"
                 return {"price": price, "currency": cur,
                         "available": avail, "raw": f"{symbol}{price:.2f}"}
 
-        print(f"  ⚠️ Prezzo non trovato: {source['label']} (HTTP {r.status_code})")
+    # Fallback: primo prezzo trovato in pagina
+    for tag in soup.find_all(string=re.compile(r'[€£$]\s*\d+[.,]\d+')):
+        m = re.search(r'([€£$])\s*(\d+[.,]\d+)', tag)
+        if m:
+            symbol = m.group(1)
+            price  = float(m.group(2).replace(',', '.'))
+            cur    = {"€": "EUR", "£": "GBP", "$": "USD"}.get(symbol, "EUR")
+            return {"price": price, "currency": cur,
+                    "available": "N/D", "raw": f"{symbol}{price:.2f}"}
 
-    except Exception as e:
-        print(f"  ❌ ERRORE kippy {source['label']}: {e}")
-
-    return {"price": None, "currency": "EUR", "available": "Errore", "raw": "N/D"}
+    return {"price": None, "currency": "EUR", "available": "Non trovato", "raw": "N/D"}
 
 
-# ── Parsing HTML Amazon (condiviso) ─────────────────────────────
+# ── Parsing HTML Amazon ──────────────────────────────────────────
 def _parse_amazon_html(html, url):
     host     = urlparse(url).netloc.replace("www.", "")
     currency = AMAZON_CURRENCY.get(host, "EUR")
     soup     = BeautifulSoup(html, "lxml")
 
-    # Rilevamento blocco
     if "captcha" in html.lower() or "robot check" in html.lower():
-        print(f"  ⚠️ CAPTCHA rilevato ({host})")
+        print(f"    ⚠️  CAPTCHA rilevato ({host})")
         return {"price": None, "currency": currency, "available": "Bloccato", "raw": "N/D"}
 
     for sel in AMAZON_PRICE_SELECTORS:
@@ -152,67 +121,126 @@ def _parse_amazon_html(html, url):
     return {"price": None, "currency": currency, "available": "Non trovato", "raw": "N/D"}
 
 
-# ── Scraping Amazon (browser condiviso) ─────────────────────────
-def scrape_all_amazon(sources, playwright_instance):
-    """
-    Riceve la lista delle sorgenti Amazon e un'istanza Playwright già aperta.
-    Usa un singolo browser con tab parallele (una alla volta per non fare spam).
-    Restituisce una lista di risultati nello stesso ordine di `sources`.
-    """
-    browser = playwright_instance.chromium.launch(headless=True)
-    context = browser.new_context(
-        user_agent=(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        ),
-        locale="it-IT",
-        extra_http_headers={"Accept-Language": "it-IT,it;q=0.9,en;q=0.8"},
-        # Disabilita WebDriver flag per ridurre rilevamento bot
-        java_script_enabled=True,
-    )
-
-    # Nasconde il flag navigator.webdriver
-    context.add_init_script("""
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    """)
-
-    results = []
-    page    = context.new_page()
-
-    for source in sources:
-        print(f"  ▶ {source['label']}")
+# ── Navigazione pagina con retry ─────────────────────────────────
+def _goto_with_retry(page, url, retries=2):
+    for attempt in range(retries + 1):
         try:
-            page.goto(source["url"], wait_until="domcontentloaded", timeout=25000)
-
-            # Aspetta che compaia un selettore prezzo (o timeout dopo 8s)
-            try:
-                page.wait_for_selector(
-                    ", ".join(AMAZON_PRICE_SELECTORS),
-                    timeout=8000
-                )
-            except Exception:
-                pass  # Procede comunque, _parse troverà quello che c'è
-
-            html = page.content()
-            r    = _parse_amazon_html(html, source["url"])
-
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            return True
         except Exception as e:
-            print(f"  ❌ ERRORE Playwright {source['label']}: {e}")
-            host     = urlparse(source["url"]).netloc.replace("www.", "")
-            currency = AMAZON_CURRENCY.get(host, "EUR")
-            r        = {"price": None, "currency": currency,
-                        "available": "Errore", "raw": "N/D"}
+            if attempt < retries:
+                print(f"    ↩️  Retry {attempt+1} per {url}: {e}")
+                time.sleep(3)
+            else:
+                print(f"    ❌ Fallito dopo {retries+1} tentativi: {e}")
+                return False
 
-        r.update({"label": source["label"], "url": source["url"]})
-        results.append(r)
-        print(f"    → {r['raw']} | {r['available']}")
 
-        time.sleep(2)  # pausa tra una pagina e l'altra
+# ── Scraping principale (browser unico) ──────────────────────────
+def run_all_scraping():
+    """
+    Apre un solo browser Playwright con due contesti:
+      1. Senza proxy → Kippy.eu
+      2. Con proxy Webshare → Amazon
+    Restituisce i risultati nell'ordine originale di SOURCES.
+    """
+    kippy_sources  = [s for s in SOURCES if s["type"] == "kippy"]
+    amazon_sources = [s for s in SOURCES if s["type"] == "amazon"]
 
-    page.close()
-    browser.close()
-    return results
+    results_kippy  = []
+    results_amazon = []
+
+    common_args = [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-blink-features=AutomationControlled",
+    ]
+
+    with sync_playwright() as pw:
+        # ── 1. Kippy.eu — senza proxy (non necessario) ──────────
+        print("\n🌐 Scraping Kippy.eu...")
+        browser_k = pw.chromium.launch(headless=True, args=common_args)
+        ctx_k = browser_k.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            locale="it-IT",
+        )
+        ctx_k.add_init_script(
+            "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
+        )
+        page_k = ctx_k.new_page()
+
+        for s in kippy_sources:
+            print(f"  ▶ {s['label']}")
+            if _goto_with_retry(page_k, s["url"]):
+                # Attende che il selettore prezzo sia presente
+                try:
+                    page_k.wait_for_selector(KIPPY_PRICE_SELECTOR, timeout=8000)
+                except Exception:
+                    pass
+                r = _parse_kippy_html(page_k.content(), s["url"])
+            else:
+                r = {"price": None, "currency": "EUR", "available": "Errore", "raw": "N/D"}
+            r.update({"label": s["label"], "url": s["url"]})
+            results_kippy.append(r)
+            print(f"    → {r['raw']} | {r['available']}")
+            time.sleep(1)
+
+        page_k.close()
+        browser_k.close()
+
+        # ── 2. Amazon — con proxy Webshare rotante ───────────────
+        print("\n🛒 Scraping Amazon (proxy Webshare)...")
+        browser_a = pw.chromium.launch(
+            headless=True,
+            args=common_args,
+            proxy={
+                "server":   "http://proxy.webshare.io:80",
+                "username": PROXY_USER,
+                "password": PROXY_PASS,
+            },
+        )
+        ctx_a = browser_a.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            locale="it-IT",
+            extra_http_headers={"Accept-Language": "it-IT,it;q=0.9,en;q=0.8"},
+        )
+        ctx_a.add_init_script(
+            "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
+        )
+        page_a = ctx_a.new_page()
+
+        for s in amazon_sources:
+            print(f"  ▶ {s['label']}")
+            if _goto_with_retry(page_a, s["url"]):
+                try:
+                    page_a.wait_for_selector(
+                        ", ".join(AMAZON_PRICE_SELECTORS), timeout=8000
+                    )
+                except Exception:
+                    pass
+                r = _parse_amazon_html(page_a.content(), s["url"])
+            else:
+                host = urlparse(s["url"]).netloc.replace("www.", "")
+                r = {"price": None, "currency": AMAZON_CURRENCY.get(host, "EUR"),
+                     "available": "Errore", "raw": "N/D"}
+            r.update({"label": s["label"], "url": s["url"]})
+            results_amazon.append(r)
+            print(f"    → {r['raw']} | {r['available']}")
+            time.sleep(2)
+
+        page_a.close()
+        browser_a.close()
+
+    # Ricostruisce ordine originale: Kippy prima, Amazon dopo
+    return results_kippy + results_amazon
 
 
 # ── Build email HTML ─────────────────────────────────────────────
@@ -277,7 +305,7 @@ def build_email(results):
     <tbody>{rows}</tbody>
   </table>
   <p style="color:#999;font-size:12px;margin-top:20px">
-    Amazon: Playwright headless · Kippy.eu: scraping diretto
+    Amazon: Playwright + Webshare proxy · Kippy.eu: Playwright diretto
   </p>
 </body></html>"""
 
@@ -306,28 +334,8 @@ def send_email(html_body, anomaly_count):
 if __name__ == "__main__":
     print(f"🚀 Avvio scraping — {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
-    kippy_sources  = [s for s in SOURCES if s["type"] == "kippy"]
-    amazon_sources = [s for s in SOURCES if s["type"] == "amazon"]
+    results = run_all_scraping()
 
-    # 1. Scraping Kippy.eu (requests, nessun browser)
-    print("\n🌐 Scraping Kippy.eu...")
-    kippy_results = []
-    for s in kippy_sources:
-        print(f"  ▶ {s['label']}")
-        r = scrape_kippy(s)
-        r.update({"label": s["label"], "url": s["url"]})
-        kippy_results.append(r)
-        print(f"    → {r['raw']} | {r['available']}")
-
-    # 2. Scraping Amazon (un solo browser Playwright per tutti gli URL)
-    print("\n🛒 Scraping Amazon (browser condiviso)...")
-    with sync_playwright() as pw:
-        amazon_results = scrape_all_amazon(amazon_sources, pw)
-
-    # 3. Ricostruisce l'ordine originale (kippy prima, amazon dopo)
-    results = kippy_results + amazon_results
-
-    # 4. Calcola anomalie e invia email
     fx = {"EUR": 1.0, "GBP": 1.17, "SEK": 0.089, "PLN": 0.23}
     anomalies = sum(1 for r in results
                     if r["price"] and r["price"] * fx.get(r["currency"], 1) < REF_PRICE - 5)
